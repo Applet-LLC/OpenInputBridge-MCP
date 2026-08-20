@@ -169,6 +169,31 @@ MCPクライアント(例: Claude Code の `.mcp.json`)に登録します。
 
 このツールが持つ能力(無昇格プロセスからのシステム全体入力の注入)のリスクと、実装済みの安全機構については [SECURITY.md](SECURITY.md) を必ず読んでください。
 
+## ロードマップ
+
+| マイルストーン | 内容 | 状態 |
+|---|---|---|
+| M1 | プロトタイプ: Cヘルパー(`oib_bridge.exe`) + TypeScript製MCPサーバーのスケルトン | ✅ 完了 |
+| M2 | v1ツール一式(送信専用)+ セーフティ機構(arm/レート制限)の実装 | ✅ 完了 |
+| M3 | 排他モードの実装(物理入力の捕捉・破棄、ウォッチドッグによる自動解除) | ✅ 完了 |
+| M4 | 実機検証(実際のOpenInputBridgeインストール環境での動作確認・バグ修正、US/JIS配列対応) | ✅ 完了(詳細は [test/REALWORLD_TESTING.md](test/REALWORLD_TESTING.md)) |
+| M5 | GitHubでの公開(MITライセンス、パブリックリポジトリ) | ✅ 完了 |
+| M6 | GitHub Actionsによるヘルパーexeの自動ビルド・署名検討、npmパッケージ公開(`npx openinputbridge-mcp`) | 🔲 未着手 |
+| M7 | クローズドベータ: 複数環境(非既定`KeyboardSlotCount`構成、複数物理キーボードの個別指定送信、他レイアウト等)での動作確認 | 🔲 未着手 |
+| M8 | MCPサーバーディレクトリへの掲載検討(安定運用の確認後) | 🔲 未着手 |
+
+今後の検証・改善候補(優先度未確定、詳細は [test/REALWORLD_TESTING.md](test/REALWORLD_TESTING.md) の「未実施の検証」参照):
+
+- 排他モード有効化中に`oib_bridge.exe`を強制終了した場合の、ドライバ側クリーンアップによる自動復元の実機検証
+- `mouse_click`の座標精度・ボタン別動作の個別検証
+- マウス絶対移動(`absolute:true`)の座標系(マルチモニタ・DPIスケーリング環境)の正確な仕様特定
+- US/JIS以外のキーボードレイアウト対応
+
 ## ライセンス
 
 [MIT](LICENSE)。`third_party/interception`(LGPL)のコードには一切依存していません。
+
+## Contributors
+
+- **[Applet-LLC](https://github.com/Applet-LLC)** — プロジェクトオーナー
+- **Claude**([Anthropic](https://www.anthropic.com/)、[Claude Code](https://claude.com/claude-code) 経由)— 実装・実機検証・ドキュメント作成に貢献
