@@ -43,6 +43,12 @@
 #include <string.h>
 #include <stdlib.h>
 
+/* GetForegroundWindow/GetWindowThreadProcessId/GetKeyboardLayout (used by
+ * HandleGetActiveKeyboardLayout) live in user32.lib, which is not among
+ * a console app's implicitly-linked default libraries under a plain
+ * cl.exe build (no .vcxproj). */
+#pragma comment(lib, "user32.lib")
+
 /* ---- Protocol constants (docs/PROTOCOL.md) ---- */
 
 #define OIB_MAX_DEVICE 20
@@ -256,6 +262,35 @@ static int EnsureKeyboardSlotCount(void) {
 }
 
 /* ---- Command handlers ---- */
+
+/* Reports the input locale of whatever window currently has focus (not
+ * this process's own, layout-less console thread), since that is what
+ * actually determines which character a given scan code + Shift state
+ * produces. Used by type_text's layout="auto" (src/tools.ts) to choose
+ * between its US and JIS character tables. Returns the low word of the
+ * HKL (the language identifier, e.g. 0x0411 for Japanese) - see
+ * https://learn.microsoft.com/windows/win32/winmsg/hkl and
+ * JAPANESE_LANGUAGE_ID in src/keycodes.ts. */
+static void HandleGetActiveKeyboardLayout(long long id) {
+    HWND fg;
+    DWORD threadId;
+    HKL layout;
+    unsigned long languageId;
+    char fields[48];
+
+    fg = GetForegroundWindow();
+    if (fg == NULL) {
+        RespondErr(id, "no foreground window (nothing focused)");
+        return;
+    }
+
+    threadId = GetWindowThreadProcessId(fg, NULL);
+    layout = GetKeyboardLayout(threadId);
+    languageId = (unsigned long)((UINT_PTR)layout & 0xFFFFu);
+
+    sprintf_s(fields, sizeof(fields), "\"languageId\":%lu", languageId);
+    RespondOk(id, fields);
+}
 
 static void HandleStatus(long long id) {
     HANDLE h = GetDeviceHandle(0);
@@ -630,6 +665,8 @@ static void HandleLine(char *line) {
 
     if (LineStartsWithCmd(line, "status")) {
         HandleStatus(id);
+    } else if (LineStartsWithCmd(line, "get_active_keyboard_layout")) {
+        HandleGetActiveKeyboardLayout(id);
     } else if (LineStartsWithCmd(line, "write_key")) {
         JsonGetInt(line, "device", &device);
         JsonGetInt(line, "makeCode", &makeCode);

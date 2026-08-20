@@ -6,7 +6,15 @@
  * physical-key naming scheme test automation engineers already know from
  * Playwright/Selenium. Values are the standard PS/2 Set 1 make codes used
  * by KEYBOARD_INPUT_DATA.MakeCode, with an `extended` flag for the E0
- * prefix. US QWERTY layout only - IME/non-US layouts are out of scope for v1.
+ * prefix.
+ *
+ * `press_key`/`key_down`/`key_up` name a *physical key* (layout-independent
+ * - the scan code is a position, not a character), so they work the same
+ * regardless of the OS's active keyboard layout. `type_text` instead takes
+ * literal *characters* and must decide which physical key + Shift state
+ * produces each one, which genuinely does depend on the active layout -
+ * see charToKeyEvent()'s `layout` parameter below. IME-based Japanese text
+ * entry (kana/kanji conversion) is out of scope for v1 regardless of layout.
  */
 
 export interface ScanCode {
@@ -68,6 +76,13 @@ export const KEY_TABLE: Readonly<Record<string, ScanCode>> = Object.freeze({
   Numpad7: sc(0x47), Numpad8: sc(0x48), Numpad9: sc(0x49),
   NumpadAdd: sc(0x4e), NumpadSubtract: sc(0x4a), NumpadDecimal: sc(0x53),
   NumpadEnter: sc(0x1c, true), NumpadDivide: sc(0x35, true),
+
+  // JIS-only physical keys (109-key Japanese keyboards have 5 keys with no
+  // US-layout equivalent; DOM code names per the UI Events spec). Safe to
+  // press regardless of active layout - on a non-JIS system the physical
+  // key simply doesn't exist, so this is an inert/unmapped scan code.
+  IntlRo: sc(0x73), IntlYen: sc(0x7d),
+  Convert: sc(0x79), NonConvert: sc(0x7b), KanaMode: sc(0x70),
 });
 
 export type KeyName = keyof typeof KEY_TABLE;
@@ -91,30 +106,74 @@ export interface CharKeyEvent {
   shift: boolean;
 }
 
-const SHIFTED_DIGIT_SYMBOLS: Readonly<Record<string, string>> = Object.freeze({
+/** Which physical-key character mapping to use in charToKeyEvent(). */
+export type KeyboardLayoutId = "us" | "jis";
+
+/** Windows LANGID (low word of HKL) for Japanese - see bridge.ts getActiveKeyboardLayout(). */
+export const JAPANESE_LANGUAGE_ID = 0x0411;
+
+const SHIFTED_DIGIT_SYMBOLS_US: Readonly<Record<string, string>> = Object.freeze({
   "!": "Digit1", "@": "Digit2", "#": "Digit3", "$": "Digit4", "%": "Digit5",
   "^": "Digit6", "&": "Digit7", "*": "Digit8", "(": "Digit9", ")": "Digit0",
 });
 
-const UNSHIFTED_SYMBOLS: Readonly<Record<string, string>> = Object.freeze({
+const UNSHIFTED_SYMBOLS_US: Readonly<Record<string, string>> = Object.freeze({
   "-": "Minus", "=": "Equal", "[": "BracketLeft", "]": "BracketRight",
   "\\": "Backslash", ";": "Semicolon", "'": "Quote", "`": "Backquote",
   ",": "Comma", ".": "Period", "/": "Slash",
 });
 
-const SHIFTED_SYMBOLS: Readonly<Record<string, string>> = Object.freeze({
+const SHIFTED_SYMBOLS_US: Readonly<Record<string, string>> = Object.freeze({
   "_": "Minus", "+": "Equal", "{": "BracketLeft", "}": "BracketRight",
   "|": "Backslash", ":": "Semicolon", '"': "Quote", "~": "Backquote",
   "<": "Comma", ">": "Period", "?": "Slash",
 });
 
-/**
- * Resolves a single character (US QWERTY layout) to the physical key that
- * types it and whether Shift is required. Returns null for characters that
- * cannot be typed this way (non-ASCII, control characters other than the
- * ones listed here).
+/*
+ * JIS (106/109-key Japanese) layout. The digit-row Shift symbols diverge
+ * from US starting at "2", and most punctuation keys produce entirely
+ * different characters since JIS reassigns several positions and adds
+ * IntlRo (no US equivalent) to the layout. Every mapping below (including
+ * the one exception noted at UNSHIFTED_SYMBOLS_JIS's "¥" omission) is
+ * confirmed against real JIS keyboard hardware - see
+ * test/REALWORLD_TESTING.md and test/realworld_jis_layout_test.mjs.
  */
-export function charToKeyEvent(ch: string): CharKeyEvent | null {
+const SHIFTED_DIGIT_SYMBOLS_JIS: Readonly<Record<string, string>> = Object.freeze({
+  "!": "Digit1", '"': "Digit2", "#": "Digit3", "$": "Digit4", "%": "Digit5",
+  "&": "Digit6", "'": "Digit7", "(": "Digit8", ")": "Digit9",
+  // Digit0 has no standard Shift symbol on JIS - omitted (unsupported).
+});
+
+const UNSHIFTED_SYMBOLS_JIS: Readonly<Record<string, string>> = Object.freeze({
+  "-": "Minus", "^": "Equal", "@": "BracketLeft", "[": "BracketRight",
+  "]": "Backslash", ";": "Semicolon", ":": "Quote",
+  ",": "Comma", ".": "Period", "/": "Slash",
+  "\\": "IntlRo",
+  // No unshifted mapping for "¥" (U+00A5): confirmed on real hardware that
+  // pressing IntlYen unshifted sends ASCII backslash (U+005C), the same
+  // character IntlRo unshifted already produces - a long-standing Windows
+  // JIS-driver quirk (the Yen key has never sent the true yen sign
+  // character, for historical Shift-JIS/CP932 compatibility reasons), not
+  // a bug here. There is no key combination that types an actual U+00A5
+  // on this layout, so it's simply unsupported by type_text; the physical
+  // key can still be pressed directly via press_key({key:"IntlYen"}).
+});
+
+const SHIFTED_SYMBOLS_JIS: Readonly<Record<string, string>> = Object.freeze({
+  "=": "Minus", "~": "Equal", "`": "BracketLeft", "{": "BracketRight",
+  "}": "Backslash", "+": "Semicolon", "*": "Quote",
+  "<": "Comma", ">": "Period", "?": "Slash",
+  "_": "IntlRo", "|": "IntlYen",
+});
+
+/**
+ * Resolves a single character to the physical key that types it and
+ * whether Shift is required, for the given keyboard layout (default
+ * "us"). Returns null for characters that cannot be typed this way
+ * (non-ASCII beyond what's tabled above, control characters other than
+ * the ones listed here).
+ */
+export function charToKeyEvent(ch: string, layout: KeyboardLayoutId = "us"): CharKeyEvent | null {
   if (ch === " ") return { key: "Space", shift: false };
   if (ch === "\n" || ch === "\r") return { key: "Enter", shift: false };
   if (ch === "\t") return { key: "Tab", shift: false };
@@ -128,14 +187,19 @@ export function charToKeyEvent(ch: string): CharKeyEvent | null {
   if (ch.length === 1 && ch >= "0" && ch <= "9") {
     return { key: `Digit${ch}` as KeyName, shift: false };
   }
-  if (ch in SHIFTED_DIGIT_SYMBOLS) {
-    return { key: SHIFTED_DIGIT_SYMBOLS[ch] as KeyName, shift: true };
+
+  const shiftedDigits = layout === "jis" ? SHIFTED_DIGIT_SYMBOLS_JIS : SHIFTED_DIGIT_SYMBOLS_US;
+  const unshiftedSymbols = layout === "jis" ? UNSHIFTED_SYMBOLS_JIS : UNSHIFTED_SYMBOLS_US;
+  const shiftedSymbols = layout === "jis" ? SHIFTED_SYMBOLS_JIS : SHIFTED_SYMBOLS_US;
+
+  if (ch in shiftedDigits) {
+    return { key: shiftedDigits[ch] as KeyName, shift: true };
   }
-  if (ch in UNSHIFTED_SYMBOLS) {
-    return { key: UNSHIFTED_SYMBOLS[ch] as KeyName, shift: false };
+  if (ch in unshiftedSymbols) {
+    return { key: unshiftedSymbols[ch] as KeyName, shift: false };
   }
-  if (ch in SHIFTED_SYMBOLS) {
-    return { key: SHIFTED_SYMBOLS[ch] as KeyName, shift: true };
+  if (ch in shiftedSymbols) {
+    return { key: shiftedSymbols[ch] as KeyName, shift: true };
   }
   return null;
 }

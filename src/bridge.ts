@@ -201,6 +201,12 @@ export class OibBridge extends EventEmitter {
     };
   }
 
+  /** Returns the Windows LANGID (low word of the HKL) of whatever window currently has focus. */
+  async getActiveKeyboardLayout(): Promise<number> {
+    const msg = await this.request("get_active_keyboard_layout");
+    return Number(msg.languageId);
+  }
+
   async writeKey(device: number, makeCode: number, down: boolean, extended: boolean): Promise<void> {
     await this.request("write_key", {
       device,

@@ -9,7 +9,15 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { OibBridge, OibBridgeError } from "./bridge.js";
 import { SafetyGate, NotArmedError, RateLimitError } from "./safety.js";
-import { KEY_TABLE, MODIFIER_KEYS, charToKeyEvent, type KeyName, type ModifierKey } from "./keycodes.js";
+import {
+  KEY_TABLE,
+  MODIFIER_KEYS,
+  charToKeyEvent,
+  JAPANESE_LANGUAGE_ID,
+  type KeyName,
+  type ModifierKey,
+  type KeyboardLayoutId,
+} from "./keycodes.js";
 
 const KEY_NAMES = Object.keys(KEY_TABLE) as [KeyName, ...KeyName[]];
 
@@ -96,6 +104,26 @@ async function setKeyState(bridge: OibBridge, device: number, key: KeyName, down
   const code = KEY_TABLE[key];
   await bridge.writeKey(device, code.makeCode, down, code.extended);
   await sleep(KEY_EVENT_SETTLE_MS);
+}
+
+/**
+ * Resolves "auto" to the layout of whatever window currently has focus
+ * (queried fresh per call, since the focused app/layout can change
+ * between calls). Falls back to "us" if the query fails - this only
+ * affects which characters type_text can produce, never press_key/
+ * key_down/key_up (those name a physical key, not a character).
+ */
+async function resolveTypeTextLayout(
+  bridge: OibBridge,
+  requested: "auto" | KeyboardLayoutId,
+): Promise<KeyboardLayoutId> {
+  if (requested !== "auto") return requested;
+  try {
+    const languageId = await bridge.getActiveKeyboardLayout();
+    return languageId === JAPANESE_LANGUAGE_ID ? "jis" : "us";
+  } catch {
+    return "us";
+  }
 }
 
 export function registerTools(server: McpServer, bridge: OibBridge, safety: SafetyGate): void {
@@ -232,12 +260,24 @@ export function registerTools(server: McpServer, bridge: OibBridge, safety: Safe
     {
       title: "Type a text string",
       description:
-        "Types a string as a sequence of keystrokes (US QWERTY layout only; no IME/non-ASCII support). " +
-        "Supports letters, digits, common punctuation, space, tab, and newline (sent as Enter). The whole " +
-        "string is validated before anything is sent, so a call either types in full or is rejected with no " +
-        "partial side effects.",
+        "Types a string as a sequence of keystrokes (no IME/kanji conversion support - direct alphanumeric/" +
+        "symbol entry only). Supports letters, digits, common punctuation, space, tab, and newline (sent as " +
+        "Enter). Which physical key + Shift state produces a given symbol character depends on the active " +
+        "keyboard layout of whatever window has focus (layout='auto', the default, detects this per call); " +
+        "US and JIS (Japanese) layouts are supported, see the `layout` parameter. The whole string is " +
+        "validated before anything is sent, so a call either types in full or is rejected with no partial " +
+        "side effects.",
       inputSchema: {
         text: z.string().min(1).max(4000),
+        layout: z
+          .enum(["auto", "us", "jis"])
+          .default("auto")
+          .describe(
+            "Keyboard layout used to map symbol characters to physical keys. 'auto' (default) detects the " +
+              "active layout of the focused window per call; only affects letters/digits' Shift-symbol " +
+              "punctuation (e.g. Shift+2 is '@' on US but '\"' on JIS) - plain letters and digits are " +
+              "unaffected by layout.",
+          ),
         delayMs: z
           .number()
           .int()
@@ -248,11 +288,22 @@ export function registerTools(server: McpServer, bridge: OibBridge, safety: Safe
         device: KEYBOARD_DEVICE_SCHEMA,
       },
     },
-    async ({ text, delayMs, device }: { text: string; delayMs: number; device: number }) => {
+    async ({
+      text,
+      layout: layoutParam,
+      delayMs,
+      device,
+    }: {
+      text: string;
+      layout: "auto" | KeyboardLayoutId;
+      delayMs: number;
+      device: number;
+    }) => {
+      const layout = await resolveTypeTextLayout(bridge, layoutParam);
       const events: { key: KeyName; shift: boolean }[] = [];
       const unsupported = new Set<string>();
       for (const ch of text) {
-        const ev = charToKeyEvent(ch);
+        const ev = charToKeyEvent(ch, layout);
         if (!ev) {
           unsupported.add(ch);
         } else {
@@ -261,8 +312,9 @@ export function registerTools(server: McpServer, bridge: OibBridge, safety: Safe
       }
       if (unsupported.size > 0) {
         return textResult(
-          `Cannot type this text: unsupported character(s) ${[...unsupported].map((c) => JSON.stringify(c)).join(", ")}. ` +
-            "Only US QWERTY letters/digits/punctuation, space, tab, and newline are supported.",
+          `Cannot type this text with layout='${layout}': unsupported character(s) ` +
+            `${[...unsupported].map((c) => JSON.stringify(c)).join(", ")}. Only letters/digits/punctuation ` +
+            "supported by that layout, space, tab, and newline are supported.",
           true,
         );
       }
@@ -290,7 +342,7 @@ export function registerTools(server: McpServer, bridge: OibBridge, safety: Safe
           if (ev.shift) await setKeyState(bridge, device, shiftKey, false);
           if (delayMs > 0) await sleep(delayMs);
         }
-        return textResult(`Typed ${events.length} character(s).`);
+        return textResult(`Typed ${events.length} character(s) (layout: ${layout}).`);
       } catch (err) {
         return errorResult(err);
       }
