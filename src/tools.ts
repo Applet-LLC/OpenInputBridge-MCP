@@ -13,21 +13,36 @@ import { KEY_TABLE, MODIFIER_KEYS, charToKeyEvent, type KeyName, type ModifierKe
 
 const KEY_NAMES = Object.keys(KEY_TABLE) as [KeyName, ...KeyName[]];
 
+/*
+ * The keyboard/mouse slot boundary is admin-configurable at driver install
+ * time (KeyboardSlotCount), not fixed at 10/10 - see docs/PROTOCOL.md and
+ * helper/oib_bridge.c's EnsureKeyboardSlotCount(). These schemas only
+ * enforce the outer 0-19 device range; the helper checks the real
+ * (queried) boundary and rejects a keyboard call routed at a mouse slot
+ * or vice versa. Callers who need a non-default slot should look at
+ * get_driver_status's keyboardSlotCount/mouseSlotCount fields first.
+ */
 const KEYBOARD_DEVICE_SCHEMA = z
   .number()
   .int()
   .min(0)
-  .max(9)
+  .max(19)
   .default(0)
-  .describe("Keyboard slot index 0-9 (see get_driver_status). Defaults to the first keyboard slot.");
+  .describe(
+    "Keyboard slot index. Defaults to 0 (always a keyboard slot). The keyboard/mouse boundary is " +
+      "admin-configurable - check get_driver_status's keyboardSlotCount if targeting a specific slot.",
+  );
 
 const MOUSE_DEVICE_SCHEMA = z
   .number()
   .int()
-  .min(10)
+  .min(0)
   .max(19)
   .default(10)
-  .describe("Mouse slot index 10-19 (see get_driver_status). Defaults to the first mouse slot.");
+  .describe(
+    "Mouse slot index. Defaults to 10 (the first mouse slot under the default 10/10 split). The keyboard/mouse " +
+      "boundary is admin-configurable - check get_driver_status's keyboardSlotCount/mouseSlotCount first if unsure.",
+  );
 
 const TAP_HOLD_MS = 20;
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -334,6 +349,92 @@ export function registerTools(server: McpServer, bridge: OibBridge, safety: Safe
         safety.checkAndConsume(1);
         await bridge.writeMouseWheel(device, delta, horizontal);
         return textResult(`Scrolled ${horizontal ? "horizontal" : "vertical"} wheel by ${delta}.`);
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "enable_exclusive_input_mode",
+    {
+      title: "Enable exclusive input mode",
+      description:
+        "TESTING/CI USE ONLY - this makes the physical keyboard and mouse stop working for the whole machine. " +
+        "Captures every physical key/mouse event on every slot and discards it, so only this MCP session's own " +
+        "tool calls (press_key, mouse_move, etc.) reach the target application - useful for deterministic test " +
+        "runs where an operator's stray physical input would otherwise flake the test. Requires " +
+        "enable_input_control to have been called first. A background watchdog auto-disables this if the MCP " +
+        "server stops sending heartbeats for watchdogTimeoutMs, and the OS itself restores physical input the " +
+        "instant this process exits for any reason (crash, kill, normal shutdown) - killing the oib_bridge.exe " +
+        "process is always a working manual escape hatch, even if this MCP server is unresponsive. Secure " +
+        "attention sequences (Ctrl+Alt+Del) are handled by Windows below this driver and are not affected.",
+      inputSchema: {
+        watchdogTimeoutMs: z
+          .number()
+          .int()
+          .min(1000)
+          .max(300000)
+          .default(5000)
+          .describe("Auto-disable if no heartbeat is received for this many milliseconds (1000-300000, default 5000)."),
+      },
+    },
+    async ({ watchdogTimeoutMs }: { watchdogTimeoutMs: number }) => {
+      try {
+        safety.checkAndConsume(1);
+        const info = await bridge.enableExclusiveMode(watchdogTimeoutMs);
+        return textResult(
+          `Exclusive input mode enabled. Physical input is now captured and discarded on all ` +
+            `${info.keyboardSlotCount} keyboard + ${info.mouseSlotCount} mouse slot(s); only this session's ` +
+            `synthetic input reaches the target application. Watchdog timeout: ${info.watchdogTimeoutMs}ms. ` +
+            `Call disable_exclusive_input_mode to restore physical input.`,
+        );
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "disable_exclusive_input_mode",
+    {
+      title: "Disable exclusive input mode",
+      description:
+        "Restores physical keyboard/mouse input. Safe to call any time, including when exclusive mode is " +
+        "already off, and deliberately bypasses the arm/rate-limit gate so it always works as an escape hatch.",
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const result = await bridge.disableExclusiveMode();
+        if (!result.wasActive) {
+          return textResult("Exclusive input mode was already off.");
+        }
+        const warning = result.failedDeviceCount > 0
+          ? ` Warning: ${result.failedDeviceCount} device(s) failed to reset - if physical input still seems ` +
+            "unresponsive, kill the oib_bridge.exe process (this always restores it)."
+          : "";
+        return textResult(`Exclusive input mode disabled; physical input restored.${warning}`, result.failedDeviceCount > 0);
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "get_exclusive_mode_status",
+    {
+      title: "Get exclusive input mode status",
+      description:
+        "Reports whether exclusive input mode is currently active (authoritative, queried live from the " +
+        "helper process). Does not require enable_input_control. Note: calling this also refreshes the " +
+        "watchdog heartbeat, same as the automatic background heartbeat does.",
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const active = await bridge.heartbeat();
+        return textResult(JSON.stringify({ exclusiveModeActive: active }));
       } catch (err) {
         return errorResult(err);
       }

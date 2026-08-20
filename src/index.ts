@@ -31,6 +31,13 @@ async function main(): Promise<void> {
   const bridge = new OibBridge();
   const safety = new SafetyGate(readSafetyOptionsFromEnv());
 
+  bridge.on("exclusiveModeAutoDisabled", (info) => {
+    process.stderr.write(
+      `openinputbridge-mcp: exclusive input mode was auto-disabled by the watchdog ` +
+        `(reason=${info.reason}, failedDeviceCount=${info.failedDeviceCount}); physical input restored.\n`,
+    );
+  });
+
   const server = new McpServer({
     name: "openinputbridge-mcp",
     version: "0.1.0",
