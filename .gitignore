@@ -1,0 +1,21 @@
+node_modules/
+dist/
+*.log
+
+# C helper build output
+helper/x64/
+helper/Debug/
+helper/Release/
+helper/*.obj
+helper/*.exe
+helper/*.pdb
+helper/*.ilk
+
+# VS/MSBuild
+.vs/
+*.user
+
+npm-debug.log*
+
+# AI assistant session history (local only, not project source)
+.specstory/

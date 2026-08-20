@@ -1,0 +1,32 @@
+{
+  "name": "openinputbridge-mcp",
+  "version": "0.1.0",
+  "description": "MCP server exposing OpenInputBridge (Interception-compatible kernel-level input) as SendInput()-alternative tools for GUI/native-app test automation.",
+  "license": "MIT",
+  "os": ["win32"],
+  "type": "module",
+  "bin": {
+    "openinputbridge-mcp": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "bin"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
