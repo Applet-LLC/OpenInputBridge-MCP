@@ -71,7 +71,18 @@
 #define IOCTL_OIB_GET_DRIVER_IDENTITY \
     CTL_CODE(FILE_DEVICE_UNKNOWN, 0xA00, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
-#pragma pack(push, 1)
+/* Deliberately NOT #pragma pack(1): the driver's own headers (standard NT
+ * DDK <ntddkbd.h>/<ntddmou.h>, and driver/common/ioctl.h for
+ * OIB_DRIVER_IDENTITY) use ordinary/natural alignment, and
+ * WdfRequestRetrieveOutputBuffer() validates the caller's buffer against
+ * sizeof() as the kernel-mode compiler computes it. KEYBOARD_INPUT_DATA/
+ * MOUSE_INPUT_DATA happen to have no padding either way (every field
+ * already falls on a naturally aligned offset), but OIB_DRIVER_IDENTITY's
+ * trailing BOOLEAN does not - packing it to 13 bytes instead of the
+ * kernel's natural 16 caused a real STATUS_BUFFER_TOO_SMALL failure
+ * against the actual driver (caught via real-hardware testing, see
+ * test/). Natural alignment must be used for all three to match the
+ * kernel side exactly. */
 typedef struct _OIB_KEYBOARD_INPUT_DATA {
     USHORT UnitId;
     USHORT MakeCode;
@@ -97,7 +108,6 @@ typedef struct _OIB_DRIVER_IDENTITY {
     ULONG   VersionMinor;
     BOOLEAN IsKeyboard;
 } OIB_DRIVER_IDENTITY;
-#pragma pack(pop)
 
 #define OIB_IDENTITY_SIGNATURE 0x3142494Fu /* "OIB1" little-endian */
 

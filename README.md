@@ -90,7 +90,7 @@ flowchart TB
 
 ### 2. キー名はDOM `KeyboardEvent.code` 語彙
 
-`press_key`/`key_down`/`key_up` の `key` パラメータは、Playwright/Seleniumのテスト自動化エンジニアに馴染みのある [DOM `KeyboardEvent.code`](https://developer.mozilla.org/en-US/docs/Web/API/UI_Events/Keyboard_event_code_values) 命名(`KeyA`〜`KeyZ`, `Digit0`〜`Digit9`, `Enter`, `ArrowUp`, `ShiftLeft`, `F1`〜`F12` 等)を使います。完全な一覧は [`src/keycodes.ts`](src/keycodes.ts) の `KEY_TABLE` を参照してください。**US QWERTY配列のみ**を前提としており、IME経由の日本語入力等はスコープ外です。
+`press_key`/`key_down`/`key_up` の `key` パラメータは、Playwright/Seleniumのテスト自動化エンジニアに馴染みのある [DOM `KeyboardEvent.code`](https://developer.mozilla.org/en-US/docs/Web/API/UI_Events/Keyboard_event_code_values) 命名(`KeyA`〜`KeyZ`, `Digit0`〜`Digit9`, `Enter`, `ArrowUp`, `ShiftLeft`, `F1`〜`F12` 等)を使います。完全な一覧は [`src/keycodes.ts`](src/keycodes.ts) の `KEY_TABLE` を参照してください。**US QWERTY配列のみ**を前提としており、IME経由の日本語入力等はスコープ外です。物理キー位置は正しく送信されますが、実際にどの文字になるかはOS側のアクティブなキーボードレイアウトに依存するため、**US配列以外(例: 日本語JIS配列)の環境では`@`/`:`/`_`等の一部記号が別の文字になることを実機で確認しています**([test/REALWORLD_TESTING.md](test/REALWORLD_TESTING.md)参照)。英数字・主要な制御キーはレイアウトに依存しません。
 
 ### 3. `type_text` は全体を検証してから送信する(部分的な副作用なし)
 
@@ -152,11 +152,15 @@ MCPクライアント(例: Claude Code の `.mcp.json`)に登録します。
 
 ## 既知の制限
 
-- **US QWERTY配列のみ**。IME経由の日本語入力等はv1のスコープ外
+実機(OpenInputBridgeインストール環境)での検証を実施済みです。詳細は [test/REALWORLD_TESTING.md](test/REALWORLD_TESTING.md) を参照してください。
+
+- **US QWERTY配列のみ**。`type_text`のスキャンコードは物理キー位置ベースで正しく送信されますが、実際にどの文字になるかはOS側のアクティブなキーボードレイアウトに依存します。日本語(JIS)配列環境では、`@`/`:`/`_`等の一部記号が異なる文字になることを実機で確認しています。英数字・主要な制御キーはレイアウトに依存せず動作します。IME経由の日本語入力はスコープ外
+- `type_text`でShift状態を1文字ごとに切り替える極端なパターン(例: `"MiXeD"`)は、タイミング対策後も一部の文字でShiftが反映されないことがあります。通常の英文・識別子等では問題にならないことを確認済みです
+- マウスの相対移動(`mouse_move`, `absolute:false`)はOSのポインタ加速の影響を受けるため、指定した移動量とカーソルの実際の移動量は一致しません(物理マウスと同じ経路のため、想定通りの挙動)
+- マウスの絶対移動(`absolute:true`)の正規化座標系(マルチモニタ・DPIスケーリング環境での基準)は未特定です。使用前に対象環境での着地点を確認することを推奨します
 - **Windows専用**
 - **読み取り・監視系ツールなし**(意図的、上記参照)
 - **事前ビルド済みバイナリ未配布**: 現状 `helper/oib_bridge.c` を利用者自身がビルドする必要があります。GitHub Actionsでのビルド・npm公開は今後のマイルストーンです
-- 排他モードは開発環境での検証のみ完了しており、**実機(OpenInputBridgeインストール環境)での動作検証はまだ行っていません**
 
 ## セキュリティ
 

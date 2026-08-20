@@ -44,7 +44,21 @@ const MOUSE_DEVICE_SCHEMA = z
       "boundary is admin-configurable - check get_driver_status's keyboardSlotCount/mouseSlotCount first if unsure.",
   );
 
-const TAP_HOLD_MS = 20;
+const TAP_HOLD_MS = 25;
+/**
+ * Minimum gap enforced after every individual key/modifier transition
+ * (not just within a tap). Confirmed necessary by real-hardware testing:
+ * our own DeviceIoControl calls are strictly sequential and each
+ * synchronous down to the class driver hand-off, but the OS's downstream
+ * raw-input pipeline (kbdclass -> raw input thread -> TranslateMessage/
+ * ToUnicode's modifier-state lookup -> WM_CHAR delivery) processes events
+ * asynchronously relative to that; firing events back to back with no gap
+ * measurably dropped characters on real hardware even though every
+ * IOCTL_WRITE call succeeded. This alone was not enough to fix rapid
+ * same-scancode modifier repeats though (see the ShiftLeft/ShiftRight
+ * alternation in type_text below) - see test/REALWORLD_TESTING.md.
+ */
+const KEY_EVENT_SETTLE_MS = 30;
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function textResult(text: string, isError = false): CallToolResult {
@@ -75,6 +89,13 @@ async function tapKey(bridge: OibBridge, device: number, key: KeyName): Promise<
   await bridge.writeKey(device, code.makeCode, true, code.extended);
   await sleep(TAP_HOLD_MS);
   await bridge.writeKey(device, code.makeCode, false, code.extended);
+  await sleep(KEY_EVENT_SETTLE_MS);
+}
+
+async function setKeyState(bridge: OibBridge, device: number, key: KeyName, down: boolean): Promise<void> {
+  const code = KEY_TABLE[key];
+  await bridge.writeKey(device, code.makeCode, down, code.extended);
+  await sleep(KEY_EVENT_SETTLE_MS);
 }
 
 export function registerTools(server: McpServer, bridge: OibBridge, safety: SafetyGate): void {
@@ -149,13 +170,11 @@ export function registerTools(server: McpServer, bridge: OibBridge, safety: Safe
       try {
         safety.checkAndConsume((modifiers.length + 1) * 2);
         for (const mod of modifiers) {
-          const code = KEY_TABLE[mod];
-          await bridge.writeKey(device, code.makeCode, true, code.extended);
+          await setKeyState(bridge, device, mod, true);
         }
         await tapKey(bridge, device, key);
         for (const mod of [...modifiers].reverse()) {
-          const code = KEY_TABLE[mod];
-          await bridge.writeKey(device, code.makeCode, false, code.extended);
+          await setKeyState(bridge, device, mod, false);
         }
         return textResult(`Pressed ${modifiers.length ? modifiers.join("+") + "+" : ""}${key}.`);
       } catch (err) {
@@ -179,8 +198,7 @@ export function registerTools(server: McpServer, bridge: OibBridge, safety: Safe
     async ({ key, device }: { key: KeyName; device: number }) => {
       try {
         safety.checkAndConsume(1);
-        const code = KEY_TABLE[key];
-        await bridge.writeKey(device, code.makeCode, true, code.extended);
+        await setKeyState(bridge, device, key, true);
         return textResult(`${key} is now held down.`);
       } catch (err) {
         return errorResult(err);
@@ -201,8 +219,7 @@ export function registerTools(server: McpServer, bridge: OibBridge, safety: Safe
     async ({ key, device }: { key: KeyName; device: number }) => {
       try {
         safety.checkAndConsume(1);
-        const code = KEY_TABLE[key];
-        await bridge.writeKey(device, code.makeCode, false, code.extended);
+        await setKeyState(bridge, device, key, false);
         return textResult(`${key} released.`);
       } catch (err) {
         return errorResult(err);
@@ -253,11 +270,24 @@ export function registerTools(server: McpServer, bridge: OibBridge, safety: Safe
       try {
         const cost = events.reduce((sum, ev) => sum + (ev.shift ? 4 : 2), 0);
         safety.checkAndConsume(cost);
-        const shiftCode = KEY_TABLE.ShiftLeft;
+        // Alternate ShiftLeft/ShiftRight across consecutive shifted
+        // characters rather than always reusing ShiftLeft. Confirmed by
+        // real-hardware testing: rapidly toggling the *same* scancode
+        // down/up/down/up (e.g. every shifted char in "MiXeD") is
+        // unreliable - Windows' input pipeline silently drops some of the
+        // repeated transitions even with generous settle delays. Using a
+        // different physical key each time avoids same-scancode repeat
+        // entirely and was reliable even at the tool's normal (non-slowed)
+        // timing. See test/REALWORLD_TESTING.md.
+        let nextShiftKey: "ShiftLeft" | "ShiftRight" = "ShiftLeft";
         for (const ev of events) {
-          if (ev.shift) await bridge.writeKey(device, shiftCode.makeCode, true, shiftCode.extended);
+          const shiftKey: "ShiftLeft" | "ShiftRight" = nextShiftKey;
+          if (ev.shift) {
+            await setKeyState(bridge, device, shiftKey, true);
+            nextShiftKey = shiftKey === "ShiftLeft" ? "ShiftRight" : "ShiftLeft";
+          }
           await tapKey(bridge, device, ev.key);
-          if (ev.shift) await bridge.writeKey(device, shiftCode.makeCode, false, shiftCode.extended);
+          if (ev.shift) await setKeyState(bridge, device, shiftKey, false);
           if (delayMs > 0) await sleep(delayMs);
         }
         return textResult(`Typed ${events.length} character(s).`);
