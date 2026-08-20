@@ -3,7 +3,7 @@
 # auto-disables exclusive mode when heartbeats stop arriving. No physical
 # keyboard/mouse interaction needed - this only checks the driver-facing
 # state transition and the emitted "event" line.
-$exePath = "C:\Users\applet\Documents\GitHub\OpenInputBridge-MCP\helper\oib_bridge.exe"
+$exePath = Join-Path $PSScriptRoot "..\helper\oib_bridge.exe"
 
 $psi = New-Object System.Diagnostics.ProcessStartInfo
 $psi.FileName = $exePath
