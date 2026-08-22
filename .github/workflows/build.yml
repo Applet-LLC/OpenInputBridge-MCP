@@ -1,0 +1,62 @@
+name: Build
+
+# Verifies that both halves of the project still build on a clean machine:
+# the C helper (helper/oib_bridge.c, built with MSVC) and the TypeScript
+# MCP server (src/). Cannot exercise real driver I/O here - GitHub-hosted
+# runners don't have OpenInputBridge installed - but does run oib_bridge.exe
+# once to confirm it starts, responds over its JSON-Lines protocol, and
+# exits cleanly rather than crashing, which is exactly the class of bug
+# (see docs on the setvbuf/struct-packing fixes) a build-only check would
+# otherwise miss entirely.
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build C helper (oib_bridge.exe)
+        shell: pwsh
+        run: |
+          cl.exe /nologo /W4 /utf-8 /Fe:helper\oib_bridge.exe helper\oib_bridge.c
+          if ($LASTEXITCODE -ne 0) { throw "cl.exe failed with exit code $LASTEXITCODE" }
+
+      - name: Smoke test oib_bridge.exe (no driver on this runner - expects a clean error, not a crash)
+        shell: pwsh
+        run: |
+          $response = '{"id":1,"cmd":"status"}' | & .\helper\oib_bridge.exe
+          $exitCode = $LASTEXITCODE
+          Write-Host "Response: $response"
+          Write-Host "Exit code: $exitCode"
+          if ($exitCode -ne 0) { throw "oib_bridge.exe exited with code $exitCode (expected 0)" }
+          if (-not $response -or $response -notmatch '"id":1') { throw "unexpected/missing response: $response" }
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openinputbridge-mcp-build
+          path: |
+            dist/
+            helper/oib_bridge.exe
+          if-no-files-found: error

@@ -1,5 +1,7 @@
 # OpenInputBridge-MCP
 
+[![Build](https://github.com/Applet-LLC/OpenInputBridge-MCP/actions/workflows/build.yml/badge.svg)](https://github.com/Applet-LLC/OpenInputBridge-MCP/actions/workflows/build.yml)
+
 **[OpenInputBridge](https://github.com/Applet-LLC/OpenInputBridge)(Interception互換のカーネルレベル キーボード/マウス入力ドライバ)を、MCP (Model Context Protocol) 経由のツールとして公開するサーバーです。**
 
 GUI/ネイティブアプリのテスト自動化における `SendInput()` / UI Automation / 座標ベース自動化ツールの代替・上位互換として、AIエージェント(Claude Codeなど)やテストコードから、カーネルレベルの合成キーボード/マウス入力を送信できます。
@@ -178,7 +180,8 @@ MCPクライアント(例: Claude Code の `.mcp.json`)に登録します。
 | M3 | 排他モードの実装(物理入力の捕捉・破棄、ウォッチドッグによる自動解除) | ✅ 完了 |
 | M4 | 実機検証(実際のOpenInputBridgeインストール環境での動作確認・バグ修正、US/JIS配列対応) | ✅ 完了(詳細は [test/REALWORLD_TESTING.md](test/REALWORLD_TESTING.md)) |
 | M5 | GitHubでの公開(MITライセンス、パブリックリポジトリ) | ✅ 完了 |
-| M6 | GitHub Actionsによるヘルパーexeの自動ビルド・署名検討、npmパッケージ公開(`npx openinputbridge-mcp`) | 🔲 未着手 |
+| M6 | GitHub Actionsによるビルド検証(push/PRごとにCヘルパー+TypeScript双方をビルド、`oib_bridge.exe`のスモークテスト) | ✅ 完了 |
+| M6b | ビルド成果物の署名検討、npmパッケージ公開(`npx openinputbridge-mcp`) | 🔲 未着手 |
 | M7 | クローズドベータ: 複数環境(非既定`KeyboardSlotCount`構成、複数物理キーボードの個別指定送信、他レイアウト等)での動作確認 | 🔲 未着手 |
 | M8 | MCPサーバーディレクトリへの掲載検討(安定運用の確認後) | 🔲 未着手 |
 
