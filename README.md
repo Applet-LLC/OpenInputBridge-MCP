@@ -184,7 +184,6 @@ MCPクライアント(例: Claude Code の `.mcp.json`)に登録します。
 
 今後の検証・改善候補(優先度未確定、詳細は [test/REALWORLD_TESTING.md](test/REALWORLD_TESTING.md) の「未実施の検証」参照):
 
-- 排他モード有効化中に`oib_bridge.exe`を強制終了した場合の、ドライバ側クリーンアップによる自動復元の実機検証
 - `mouse_click`の座標精度・ボタン別動作の個別検証
 - マウス絶対移動(`absolute:true`)の座標系(マルチモニタ・DPIスケーリング環境)の正確な仕様特定
 - US/JIS以外のキーボードレイアウト対応
