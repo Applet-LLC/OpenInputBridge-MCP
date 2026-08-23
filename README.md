@@ -162,7 +162,7 @@ MCPクライアント(例: Claude Code の `.mcp.json`)に登録します。
 - JIS配列の「¥」キーは(Windowsの既知の仕様により)実際にはASCIIバックスラッシュを送出し、真のyen記号文字(U+00A5)を`type_text`で入力する手段はありません(物理キーそのものは`press_key({key:"IntlYen"})`で押せます)
 - `type_text`でShift状態を1文字ごとに切り替える極端なパターン(例: `"MiXeD"`)は、タイミング対策後も一部の文字でShiftが反映されないことがあります。通常の英文・識別子等では問題にならないことを確認済みです
 - マウスの相対移動(`mouse_move`, `absolute:false`)はOSのポインタ加速の影響を受けるため、指定した移動量とカーソルの実際の移動量は一致しません(物理マウスと同じ経路のため、想定通りの挙動)
-- マウスの絶対移動(`absolute:true`)の0-65535正規化座標は、**プライマリモニタの物理ピクセル範囲**にマッピングされます(DPIスケーリング設定とは無関係。標準Win32 `SendInput`の`MOUSEEVENTF_ABSOLUTE`と同じ仕様)。**セカンダリモニタなど、プライマリモニタの外側へは絶対移動で到達できません**(マルチモニタでは相対移動を使用してください)。実機検証・`mouse_click`によるクリック精度確認済みです(詳細は [test/REALWORLD_TESTING.md](test/REALWORLD_TESTING.md) の項目6)
+- マウスの絶対移動(`absolute:true`)の0-65535正規化座標は、**プライマリモニタの物理ピクセル範囲**にマッピングされます(DPIスケーリング設定とは無関係。標準Win32 `SendInput`の`MOUSEEVENTF_ABSOLUTE`と同じ仕様)。**セカンダリモニタなど、プライマリモニタの外側へは絶対移動で到達できません**。マルチモニタ環境では相対移動(`absolute:false`)でモニタ境界をまたげることを実機で確認済みです。実機検証・`mouse_click`によるクリック精度確認済みです(詳細は [test/REALWORLD_TESTING.md](test/REALWORLD_TESTING.md) の項目6)
 - **Windows専用**
 - **読み取り・監視系ツールなし**(意図的、上記参照)
 - **事前ビルド済みバイナリ未配布**: 現状 `helper/oib_bridge.c` を利用者自身がビルドする必要があります。GitHub Actionsでのビルド・npm公開は今後のマイルストーンです
