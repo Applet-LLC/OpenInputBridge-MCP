@@ -367,33 +367,63 @@ export function registerTools(server: McpServer, bridge: OibBridge, safety: Safe
       title: "Move the mouse",
       description:
         "Moves the mouse, either relative to its current position (default) or to absolute coordinates " +
-        "(same semantics as a raw MOUSE_INPUT_DATA record with MOUSE_MOVE_ABSOLUTE).",
+        "(same semantics as a raw MOUSE_INPUT_DATA record with MOUSE_MOVE_ABSOLUTE). Absolute coordinates are " +
+        "normalized 0-65535 and map to the primary monitor's pixel bounds by default (same convention as " +
+        "SendInput's MOUSEEVENTF_ABSOLUTE) - set virtualDesktop=true to map them across the full virtual " +
+        "desktop (all monitors combined) instead, to reach secondary monitors directly.",
       inputSchema: {
         x: z.number().int(),
         y: z.number().int(),
         absolute: z.boolean().default(false),
+        virtualDesktop: z
+          .boolean()
+          .default(false)
+          .describe(
+            "Only meaningful when absolute=true: normalize x/y against the full virtual desktop bounds " +
+              "(all monitors) instead of just the primary monitor, letting absolute coordinates reach secondary " +
+              "monitors. Ignored when absolute=false.",
+          ),
         device: MOUSE_DEVICE_SCHEMA,
       },
     },
-    async ({ x, y, absolute, device }: { x: number; y: number; absolute: boolean; device: number }) => {
+    async ({
+      x,
+      y,
+      absolute,
+      virtualDesktop,
+      device,
+    }: {
+      x: number;
+      y: number;
+      absolute: boolean;
+      virtualDesktop: boolean;
+      device: number;
+    }) => {
       try {
         safety.checkAndConsume(1);
-        await bridge.writeMouseMove(device, x, y, absolute);
+        await bridge.writeMouseMove(device, x, y, absolute, virtualDesktop);
         if (absolute) {
           // Confirmed on real hardware: the *first* absolute MOUSE_INPUT_DATA
-          // write after any non-absolute mouse activity is silently ignored
-          // roughly half the time (cursor doesn't move at all), but a second
-          // write with the same target is always applied correctly. This
-          // looks like the same "first sample only calibrates, doesn't move"
-          // behavior common to real absolute pointing devices (touchscreens/
-          // tablets) - resending is a robust, harmless fix since a no-op
-          // repeat of an already-applied move has no visible effect either
-          // way. See test/REALWORLD_TESTING.md item 6.
+          // write after any non-absolute mouse activity, or after a change
+          // in which Flags bits are combined (e.g. adding/removing
+          // MOUSE_VIRTUAL_DESKTOP), is silently ignored or lands on a stale
+          // position - but repeating the same write settles it. Two repeats
+          // (three writes total) reliably converged in testing where a
+          // single repeat (two total) sometimes did not, particularly right
+          // after switching virtualDesktop on/off. This looks like the same
+          // "first sample only calibrates" behavior common to real absolute
+          // pointing devices (touchscreens/tablets). Repeating is harmless -
+          // a no-op resend of an already-applied move has no visible effect.
+          // See test/REALWORLD_TESTING.md item 6.
           await sleep(MOUSE_EVENT_SETTLE_MS);
-          await bridge.writeMouseMove(device, x, y, absolute);
+          await bridge.writeMouseMove(device, x, y, absolute, virtualDesktop);
+          await sleep(MOUSE_EVENT_SETTLE_MS);
+          await bridge.writeMouseMove(device, x, y, absolute, virtualDesktop);
         }
         await sleep(MOUSE_EVENT_SETTLE_MS);
-        return textResult(`Moved mouse ${absolute ? "to" : "by"} (${x}, ${y}).`);
+        return textResult(
+          `Moved mouse ${absolute ? "to" : "by"} (${x}, ${y})${absolute && virtualDesktop ? " (virtual desktop)" : ""}.`,
+        );
       } catch (err) {
         return errorResult(err);
       }

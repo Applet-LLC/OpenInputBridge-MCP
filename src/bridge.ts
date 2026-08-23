@@ -220,8 +220,14 @@ export class OibBridge extends EventEmitter {
     await this.request("write_mouse_button", { device, buttonFlags });
   }
 
-  async writeMouseMove(device: number, x: number, y: number, absolute: boolean): Promise<void> {
-    await this.request("write_mouse_move", { device, x, y, absolute: absolute ? 1 : 0 });
+  async writeMouseMove(device: number, x: number, y: number, absolute: boolean, virtualDesktop = false): Promise<void> {
+    await this.request("write_mouse_move", {
+      device,
+      x,
+      y,
+      absolute: absolute ? 1 : 0,
+      virtualDesktop: virtualDesktop ? 1 : 0,
+    });
   }
 
   async writeMouseWheel(device: number, rolling: number, horizontal: boolean): Promise<void> {

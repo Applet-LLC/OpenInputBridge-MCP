@@ -75,7 +75,7 @@ flowchart TB
 | `press_key` | 1キーをタップ(押して離す)。Ctrl+A等の修飾キー同時押しにも対応 |
 | `key_down` / `key_up` | キーを押しっぱなしにする/離す(複合ジェスチャ用) |
 | `type_text` | 文字列をキーストローク列として送信する(US/JIS配列に対応、既定で自動判定) |
-| `mouse_move` | マウスを相対/絶対移動する |
+| `mouse_move` | マウスを相対/絶対移動する(絶対移動は`virtualDesktop:true`でマルチモニタ全体を対象にできる) |
 | `mouse_click` | マウスボタン(左/右/中/X1/X2)のクリック・押下・解放 |
 | `mouse_wheel` | 垂直/水平ホイールのスクロール |
 | `enable_exclusive_input_mode` | **排他モード**: 物理キーボード/マウスの入力を全スロットで捕捉・破棄し、このセッションからの合成入力だけを対象アプリに届ける(CI/専用テスト機向け、要armかつ強い注意が必要) |
@@ -162,7 +162,7 @@ MCPクライアント(例: Claude Code の `.mcp.json`)に登録します。
 - JIS配列の「¥」キーは(Windowsの既知の仕様により)実際にはASCIIバックスラッシュを送出し、真のyen記号文字(U+00A5)を`type_text`で入力する手段はありません(物理キーそのものは`press_key({key:"IntlYen"})`で押せます)
 - `type_text`でShift状態を1文字ごとに切り替える極端なパターン(例: `"MiXeD"`)は、タイミング対策後も一部の文字でShiftが反映されないことがあります。通常の英文・識別子等では問題にならないことを確認済みです
 - マウスの相対移動(`mouse_move`, `absolute:false`)はOSのポインタ加速の影響を受けるため、指定した移動量とカーソルの実際の移動量は一致しません(物理マウスと同じ経路のため、想定通りの挙動)
-- マウスの絶対移動(`absolute:true`)の0-65535正規化座標は、**プライマリモニタの物理ピクセル範囲**にマッピングされます(DPIスケーリング設定とは無関係。標準Win32 `SendInput`の`MOUSEEVENTF_ABSOLUTE`と同じ仕様)。**セカンダリモニタなど、プライマリモニタの外側へは絶対移動で到達できません**。マルチモニタ環境では相対移動(`absolute:false`)でモニタ境界をまたげることを実機で確認済みです。実機検証・`mouse_click`によるクリック精度確認済みです(詳細は [test/REALWORLD_TESTING.md](test/REALWORLD_TESTING.md) の項目6)
+- マウスの絶対移動(`absolute:true`)の0-65535正規化座標は、既定では**プライマリモニタの物理ピクセル範囲**にマッピングされます(DPIスケーリング設定とは無関係。標準Win32 `SendInput`の`MOUSEEVENTF_ABSOLUTE`と同じ仕様)。**セカンダリモニタなど、仮想デスクトップ全体を対象にしたい場合は`virtualDesktop:true`を指定してください**(標準`SendInput`の`MOUSEEVENTF_VIRTUALDESK`相当)。マルチモニタ環境では相対移動(`absolute:false`)でモニタ境界をまたぐことも可能です。実機検証・`mouse_click`によるクリック精度確認済みです(詳細は [test/REALWORLD_TESTING.md](test/REALWORLD_TESTING.md) の項目6)
 - **Windows専用**
 - **読み取り・監視系ツールなし**(意図的、上記参照)
 - **事前ビルド済みバイナリ未配布**: 現状 `helper/oib_bridge.c` を利用者自身がビルドする必要があります。GitHub Actionsでのビルド・npm公開は今後のマイルストーンです
@@ -188,7 +188,6 @@ MCPクライアント(例: Claude Code の `.mcp.json`)に登録します。
 今後の検証・改善候補(優先度未確定、詳細は [test/REALWORLD_TESTING.md](test/REALWORLD_TESTING.md) の「未実施の検証」参照):
 
 - マウスホイールのスクロール位置変化の、UI Automationを使った自動検証(右クリックのコンテキストメニュー出現は、モダンWindows 11のWinUIベース実装であることを確認済み。実行時エラーが出ないことは確認済み)
-- 仮想デスクトップ全体(セカンダリモニタ含む)をカバーする絶対座標指定への対応(`MOUSEEVENTF_VIRTUALDESK`相当の拡張)
 - US/JIS以外のキーボードレイアウト対応
 
 ## ライセンス

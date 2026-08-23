@@ -136,9 +136,13 @@ typedef struct _OIB_DRIVER_IDENTITY {
 #define OIB_MOUSE_WHEEL        0x0400
 #define OIB_MOUSE_HWHEEL       0x0800
 
-/* MOUSE_INPUT_DATA.Flags bits */
-#define OIB_MOUSE_MOVE_RELATIVE 0x0000
-#define OIB_MOUSE_MOVE_ABSOLUTE 0x0001
+/* MOUSE_INPUT_DATA.Flags bits (standard NT DDK, ntddmou.h) */
+#define OIB_MOUSE_MOVE_RELATIVE      0x0000
+#define OIB_MOUSE_MOVE_ABSOLUTE      0x0001
+/* Combines with OIB_MOUSE_MOVE_ABSOLUTE: LastX/LastY (0-65535) map to the
+ * full virtual desktop (all monitors) instead of just the primary
+ * monitor. See docs/PROTOCOL.md / MSDN's MOUSE_INPUT_DATA reference. */
+#define OIB_MOUSE_VIRTUAL_DESKTOP    0x0002
 
 /* ---- Device handle cache ---- */
 
@@ -403,10 +407,11 @@ static void HandleWriteMouseButton(long long id, int device, int buttonFlags) {
     RespondOk(id, NULL);
 }
 
-static void HandleWriteMouseMove(long long id, int device, int x, int y, int absolute) {
+static void HandleWriteMouseMove(long long id, int device, int x, int y, int absolute, int virtualDesktop) {
     HANDLE h;
     OIB_MOUSE_INPUT_DATA data;
     DWORD bytesReturned = 0;
+    USHORT flags;
     int kbCount = EnsureKeyboardSlotCount();
 
     if (kbCount < 0) {
@@ -423,8 +428,13 @@ static void HandleWriteMouseMove(long long id, int device, int x, int y, int abs
         return;
     }
 
+    flags = absolute ? OIB_MOUSE_MOVE_ABSOLUTE : OIB_MOUSE_MOVE_RELATIVE;
+    if (absolute && virtualDesktop) {
+        flags = (USHORT)(flags | OIB_MOUSE_VIRTUAL_DESKTOP);
+    }
+
     ZeroMemory(&data, sizeof(data));
-    data.Flags = absolute ? OIB_MOUSE_MOVE_ABSOLUTE : OIB_MOUSE_MOVE_RELATIVE;
+    data.Flags = flags;
     data.LastX = x;
     data.LastY = y;
 
@@ -658,7 +668,7 @@ static int LineStartsWithCmd(const char *line, const char *cmd) {
 static void HandleLine(char *line) {
     long id = 0;
     long device = 0, makeCode = 0, down = 1, extended = 0;
-    long buttonFlags = 0, x = 0, y = 0, absolute = 0, rolling = 0, horizontal = 0;
+    long buttonFlags = 0, x = 0, y = 0, absolute = 0, virtualDesktop = 0, rolling = 0, horizontal = 0;
     long watchdogTimeoutMs = OIB_DEFAULT_WATCHDOG_TIMEOUT_MS;
 
     JsonGetInt(line, "id", &id);
@@ -682,7 +692,8 @@ static void HandleLine(char *line) {
         JsonGetInt(line, "x", &x);
         JsonGetInt(line, "y", &y);
         JsonGetInt(line, "absolute", &absolute);
-        HandleWriteMouseMove(id, (int)device, (int)x, (int)y, (int)absolute);
+        JsonGetInt(line, "virtualDesktop", &virtualDesktop);
+        HandleWriteMouseMove(id, (int)device, (int)x, (int)y, (int)absolute, (int)virtualDesktop);
     } else if (LineStartsWithCmd(line, "write_mouse_wheel")) {
         JsonGetInt(line, "device", &device);
         JsonGetInt(line, "rolling", &rolling);
