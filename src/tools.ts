@@ -67,6 +67,18 @@ const TAP_HOLD_MS = 25;
  * alternation in type_text below) - see test/REALWORLD_TESTING.md.
  */
 const KEY_EVENT_SETTLE_MS = 30;
+/**
+ * Minimum gap enforced after every mouse event (move/click/wheel), for the
+ * same reason as KEY_EVENT_SETTLE_MS: our IOCTL_WRITE call returning
+ * successfully only means mouclass accepted the record, not that the OS
+ * has finished propagating it to the actual on-screen cursor position.
+ * Confirmed on real hardware: reading back the cursor position (or
+ * clicking) immediately after an absolute mouse_move landed on a stale/
+ * transient position around half the time; waiting even briefly first
+ * made every read match the expected coordinate. See
+ * test/REALWORLD_TESTING.md.
+ */
+const MOUSE_EVENT_SETTLE_MS = 50;
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function textResult(text: string, isError = false): CallToolResult {
@@ -367,6 +379,20 @@ export function registerTools(server: McpServer, bridge: OibBridge, safety: Safe
       try {
         safety.checkAndConsume(1);
         await bridge.writeMouseMove(device, x, y, absolute);
+        if (absolute) {
+          // Confirmed on real hardware: the *first* absolute MOUSE_INPUT_DATA
+          // write after any non-absolute mouse activity is silently ignored
+          // roughly half the time (cursor doesn't move at all), but a second
+          // write with the same target is always applied correctly. This
+          // looks like the same "first sample only calibrates, doesn't move"
+          // behavior common to real absolute pointing devices (touchscreens/
+          // tablets) - resending is a robust, harmless fix since a no-op
+          // repeat of an already-applied move has no visible effect either
+          // way. See test/REALWORLD_TESTING.md item 6.
+          await sleep(MOUSE_EVENT_SETTLE_MS);
+          await bridge.writeMouseMove(device, x, y, absolute);
+        }
+        await sleep(MOUSE_EVENT_SETTLE_MS);
         return textResult(`Moved mouse ${absolute ? "to" : "by"} (${x}, ${y}).`);
       } catch (err) {
         return errorResult(err);
@@ -406,6 +432,7 @@ export function registerTools(server: McpServer, bridge: OibBridge, safety: Safe
         } else {
           await bridge.writeMouseButton(device, flags.up);
         }
+        await sleep(MOUSE_EVENT_SETTLE_MS);
         return textResult(`${button} button: ${action}.`);
       } catch (err) {
         return errorResult(err);
@@ -430,6 +457,7 @@ export function registerTools(server: McpServer, bridge: OibBridge, safety: Safe
       try {
         safety.checkAndConsume(1);
         await bridge.writeMouseWheel(device, delta, horizontal);
+        await sleep(MOUSE_EVENT_SETTLE_MS);
         return textResult(`Scrolled ${horizontal ? "horizontal" : "vertical"} wheel by ${delta}.`);
       } catch (err) {
         return errorResult(err);
