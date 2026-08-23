@@ -187,7 +187,8 @@ MCPクライアント(例: Claude Code の `.mcp.json`)に登録します。
 
 今後の検証・改善候補(優先度未確定、詳細は [test/REALWORLD_TESTING.md](test/REALWORLD_TESTING.md) の「未実施の検証」参照):
 
-- マウスホイールのスクロール位置変化の、UI Automationを使った自動検証(右クリックのコンテキストメニュー出現は、モダンWindows 11のWinUIベース実装であることを確認済み。実行時エラーが出ないことは確認済み)
+- 非既定の`KeyboardSlotCount`構成での動作確認
+- 複数物理キーボードを`device`パラメータで個別指定して送信する動作の確認
 - US/JIS以外のキーボードレイアウト対応
 
 ## ライセンス

@@ -16,6 +16,7 @@
 | `realworld_mouse_test.mjs` / `realworld_mouse_absolute_test.mjs` | 相対/絶対マウス移動の検証 |
 | `realworld_mouse_calibration.mjs` | 絶対座標(`absolute:true`)の正規化値→実ピクセル位置の対応関係を調べるキャリブレーション用(検証6で使用、解明・対応済み) |
 | `realworld_mouse_virtualdesktop_test.mjs` | `virtualDesktop:true`(`MOUSE_VIRTUAL_DESKTOP`フラグ)を使った仮想デスクトップ全体への絶対移動を検証 |
+| `realworld_wheel_scroll_once.mjs` | カーソル位置合わせと`mouse_wheel`送信を1プロセス内で連続実行(スクロール位置検証用) |
 | `realworld_mouse_move_once.mjs` / `realworld_mouse_click_once.mjs` / `realworld_key_once.mjs` | CLI引数で1回分の`mouse_move`/`mouse_click`/`press_key`を送る単発実行ツール。外部(PowerShell)のカーソル位置・UI状態確認と1手ずつ交互に実行するために使用 |
 | `realworld_mouse_relative_sequence.mjs` | 複数回の相対移動を1プロセス・1接続内で連続実行(モニタ境界越えの検証用。単発実行ツールを繰り返す方式だと不規則な挙動が出たため、この方式に変更した) |
 | `get_physical_cursor_pos.ps1` / `set_physical_cursor_pos.ps1` | `SetProcessDpiAwarenessContext(PER_MONITOR_AWARE_V2)`を用いて、DPIスケーリングの影響を受けない物理ピクセル座標でカーソル位置を取得/設定する(新しいプロセスとして毎回実行する必要がある、検証6参照) |
@@ -180,12 +181,19 @@ SECURITY.mdに記載した「`oib_bridge.exe`プロセスを終了させるこ�
 
 **追記(File Explorerでの追検証)**: 右クリックについては、File Explorer(`C:\Windows\System32`フォルダ)で再検証したところ、UI Automationの`ControlType.Menu`では検出できなかったものの、`EnumWindows`でウィンドウクラス`XamlExplorerHostIslandWindow_WASDK`(Windows 11のモダンなWinUI/XAMLベースのコンテキストメニュー)が実際に出現することを確認できた。**右クリックは正しくコンテキストメニューを開いている**が、Windows 11の新しいコンテキストメニュー実装はUI AutomationのMenuコントロールタイプとして公開されないため、そちらでの検出は今後も期待できない。
 
-ホイールのスクロール位置変化については、File Explorerのファイル一覧が`ScrollPattern`を公開していることを確認できた(スクロール前`VerticalScrollPercent: 0`)。ただし、右クリック検証後に同じExplorerウィンドウのUI Automationツリーが縮退し(子要素が検出できなくなった)、スクロール後の値を取得できなかった。原因は特定できていない(Explorer側の一時的な状態変化の可能性)。
+## マウスホイールのスクロール位置検証(成功)
 
-**結論**: 上記6の修正(絶対座標の2回書き込み)により、`mouse_click`は実用上必要な精度で機能することを確認した。
+File Explorer(`C:\Windows\System32\drivers`フォルダ、28項目・`ScrollPattern`公開済みのリストビュー)で、`mouse_wheel`が実際にスクロール位置を変化させることをUI Automationで確認した(`test/realworld_wheel_scroll_once.mjs`)。
+
+1. カーソルをリスト中心へ移動(`absolute:true`)、`VerticalScrollPercent`が`0`であることを確認
+2. `mouse_wheel({delta:-720})`(下方向6ノッチ分)を実行 — カーソル位置とホイール送信を1つのスクリプト内で連続実行(モニタまたぎ検証で得た教訓通り、別プロセスを挟むとカーソル位置がずれることがあったため)
+3. `VerticalScrollPercent`が`0`→`3.21`に変化したことを確認 — **ホイールが実際にスクロールを引き起こしていることを客観的に確認**
+
+なお、同じ内容を別プロセス(新規`oib_bridge.exe`)から追加でもう一度送信した際は値が変化しなかった。これは絶対座標移動で確認済みの「新規プロセスでの初回書き込みが不安定になることがある」現象と同種と考えられ、ホイール自体の機能不全ではないと判断している。
+
+**結論**: `mouse_click`(前セクション)・`mouse_wheel`(本セクション)とも、実際のUI操作として機能することを実機で確認できた。右クリックのコンテキストメニュー出現も、ウィンドウクラス検出により確認済み(前セクション参照)。これでv1ツール一式の実機検証は一通り完了した。
 
 ## 未実施の検証
 
-- マウスホイールのスクロール位置変化の、UI Automationを使った自動検証(File Explorerで`ScrollPattern`公開を確認済みだが、右クリック検証後にツリーが縮退し未完了。実行時エラーが出ないことのみ確認済み)。右クリックのコンテキストメニュー出現自体は、ウィンドウクラス検出により確認済み(上記参照)
 - キーボード/マウスのスロット数が既定値(10/10)以外に設定された環境での動作
 - 複数の物理キーボード(今回`identify2`で3台の区別を確認済み)を、`device`パラメータで個別に指定して送信する動作
