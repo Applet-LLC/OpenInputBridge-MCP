@@ -52,6 +52,9 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
+      - name: Layout sanity check (pure logic, no driver required)
+        run: node test/layout_sanity_check.mjs
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:

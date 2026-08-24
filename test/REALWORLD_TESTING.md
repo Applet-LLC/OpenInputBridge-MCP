@@ -19,6 +19,7 @@
 | `realworld_wheel_scroll_once.mjs` | カーソル位置合わせと`mouse_wheel`送信を1プロセス内で連続実行(スクロール位置検証用) |
 | `realworld_mouse_move_once.mjs` / `realworld_mouse_click_once.mjs` / `realworld_key_once.mjs` | CLI引数で1回分の`mouse_move`/`mouse_click`/`press_key`を送る単発実行ツール。外部(PowerShell)のカーソル位置・UI状態確認と1手ずつ交互に実行するために使用 |
 | `realworld_mouse_relative_sequence.mjs` | 複数回の相対移動を1プロセス・1接続内で連続実行(モニタ境界越えの検証用。単発実行ツールを繰り返す方式だと不規則な挙動が出たため、この方式に変更した) |
+| `layout_sanity_check.mjs` | `src/keycodes.ts`の各レイアウト文字テーブルの内部ロジックをユニットテストレベルで検証(ドライバ不要、CI組み込み済み)。実機検証の代替にはならない点に注意 |
 | `get_physical_cursor_pos.ps1` / `set_physical_cursor_pos.ps1` | `SetProcessDpiAwarenessContext(PER_MONITOR_AWARE_V2)`を用いて、DPIスケーリングの影響を受けない物理ピクセル座標でカーソル位置を取得/設定する(新しいプロセスとして毎回実行する必要がある、検証6参照) |
 | `get_tab_bounds.ps1` / `get_document_bounds.ps1` | UI AutomationでNotepadのタブ/文書領域の物理バウンディング矩形を取得(`mouse_click`精度検証で使用) |
 | `realworld_shift_stress.mjs` / `realworld_shift_isolated.mjs` / `realworld_shift_altkey.mjs` | Shift状態タイミング問題の切り分け用 |
@@ -193,7 +194,25 @@ File Explorer(`C:\Windows\System32\drivers`フォルダ、28項目・`ScrollPatt
 
 **結論**: `mouse_click`(前セクション)・`mouse_wheel`(本セクション)とも、実際のUI操作として機能することを実機で確認できた。右クリックのコンテキストメニュー出現も、ウィンドウクラス検出により確認済み(前セクション参照)。これでv1ツール一式の実機検証は一通り完了した。
 
+## 追加キーボードレイアウト(独・仏・露・韓国語字母・台湾注音符号)の実装(未検証)
+
+`src/keycodes.ts`を、レイアウトごとの完全な文字テーブル(`char -> {key, shift}`)方式に再構成し、以下を追加した。
+
+- `de`(ドイツ語QWERTZ)・`fr`(フランス語AZERTY)・`ru`(ロシア語ЙЦУКЕН): US/JISと同じ`type_text`の`layout:"auto"`対象に追加(`get_active_keyboard_layout`のLANGIDから自動判定: 独`0x0407`、仏`0x040C`、露`0x0419`)
+- `ko`(韓国語2ベルシク字母)・`tw`(台湾注音符号): **自動判定には含めない**。理由は、同じキーボードレイアウト(LANGID)のまま、IMEのハングル/直接入力モードがON/OFF切り替わることがあり、LANGIDだけからは「今どちらのモードか」を判別できないため。`layout`パラメータで明示指定した場合のみ有効
+- `ko`/`tw`とも、IMEによる合成(字母→ハングル音節、注音記号→漢字)は行わない。個々の字母/注音記号をそのまま1文字ずつ送信するのみ(例: `layout:"ko"`で"r"+"k"を送ると、字母「ㄱ」「ㅏ」が個別に送信され、合成された音節「가」にはならない)
+
+**検証状況**: `test/layout_sanity_check.mjs`で、各レイアウトテーブルの主要な文字マッピング(内部ロジックが意図通りに動くか)をユニットテストレベルで確認し、CI(`build.yml`)にも組み込んだ。ただし、これは「自分が書いたテーブルの通りに実装されているか」の確認に過ぎず、**US/JISのように実機のドイツ語/フランス語/ロシア語/韓国語/繁体中国語キーボードで検証したものではない**。特に以下は誤りのリスクが相対的に高い(標準リファレンスに基づくが未確認):
+
+- ドイツ語のデッドキー周辺(Equal位置の`´`、Backquote位置の`^`は未対応として除外)
+- フランス語のデッドキー(BracketLeft位置の`^`は未対応として除外)、および`µ`・`ù`等の低頻度記号
+- ロシア語のBackslash位置キー・Slash位置キーの正確な割り当て(コード内に「lower confidence」と明記)
+- 韓国語・台湾注音とも、子音・母音・注音記号の網羅性(基本セットはカバーしているが、追加の複合母音等は未対応の可能性)
+
+今後、該当言語のキーボード実機を用意できた際に、JIS配列で行ったのと同じ手順(`realworld_jis_layout_test.mjs`のような体系的な入力→実際の着弾文字確認)で検証することを推奨する。
+
 ## 未実施の検証
 
 - キーボード/マウスのスロット数が既定値(10/10)以外に設定された環境での動作
 - 複数の物理キーボード(今回`identify2`で3台の区別を確認済み)を、`device`パラメータで個別に指定して送信する動作
+- 独/仏/露/韓国語字母/台湾注音符号レイアウトの実機検証(現状は標準仕様ベースの未検証実装、上記セクション参照)

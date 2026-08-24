@@ -13,13 +13,14 @@ import {
   KEY_TABLE,
   MODIFIER_KEYS,
   charToKeyEvent,
-  JAPANESE_LANGUAGE_ID,
+  LANGID_TO_AUTO_LAYOUT,
   type KeyName,
   type ModifierKey,
   type KeyboardLayoutId,
 } from "./keycodes.js";
 
 const KEY_NAMES = Object.keys(KEY_TABLE) as [KeyName, ...KeyName[]];
+const LAYOUT_IDS = ["us", "jis", "de", "fr", "ru", "ko", "tw"] as const satisfies readonly KeyboardLayoutId[];
 
 /*
  * The keyboard/mouse slot boundary is admin-configurable at driver install
@@ -121,9 +122,12 @@ async function setKeyState(bridge: OibBridge, device: number, key: KeyName, down
 /**
  * Resolves "auto" to the layout of whatever window currently has focus
  * (queried fresh per call, since the focused app/layout can change
- * between calls). Falls back to "us" if the query fails - this only
- * affects which characters type_text can produce, never press_key/
- * key_down/key_up (those name a physical key, not a character).
+ * between calls). Falls back to "us" if the query fails, or if the
+ * detected LANGID isn't one of the auto-detectable layouts (this
+ * includes Korean/Taiwan - see LANGID_TO_AUTO_LAYOUT's doc comment for
+ * why those are explicit-only). Only affects which characters
+ * type_text can produce, never press_key/key_down/key_up (those name a
+ * physical key, not a character).
  */
 async function resolveTypeTextLayout(
   bridge: OibBridge,
@@ -132,7 +136,7 @@ async function resolveTypeTextLayout(
   if (requested !== "auto") return requested;
   try {
     const languageId = await bridge.getActiveKeyboardLayout();
-    return languageId === JAPANESE_LANGUAGE_ID ? "jis" : "us";
+    return LANGID_TO_AUTO_LAYOUT.get(languageId) ?? "us";
   } catch {
     return "us";
   }
@@ -272,23 +276,27 @@ export function registerTools(server: McpServer, bridge: OibBridge, safety: Safe
     {
       title: "Type a text string",
       description:
-        "Types a string as a sequence of keystrokes (no IME/kanji conversion support - direct alphanumeric/" +
-        "symbol entry only). Supports letters, digits, common punctuation, space, tab, and newline (sent as " +
-        "Enter). Which physical key + Shift state produces a given symbol character depends on the active " +
-        "keyboard layout of whatever window has focus (layout='auto', the default, detects this per call); " +
-        "US and JIS (Japanese) layouts are supported, see the `layout` parameter. The whole string is " +
+        "Types a string as a sequence of keystrokes (no IME/kanji-hangul-hanzi conversion support - direct " +
+        "alphanumeric/symbol/jamo/zhuyin entry only, see the `layout` parameter). Supports letters, digits, " +
+        "common punctuation, space, tab, and newline (sent as Enter). Which physical key + Shift state " +
+        "produces a given character depends on the active keyboard layout of whatever window has focus " +
+        "(layout='auto', the default, detects this per call for us/jis/de/fr/ru). The whole string is " +
         "validated before anything is sent, so a call either types in full or is rejected with no partial " +
         "side effects.",
       inputSchema: {
         text: z.string().min(1).max(4000),
         layout: z
-          .enum(["auto", "us", "jis"])
+          .enum(["auto", ...LAYOUT_IDS])
           .default("auto")
           .describe(
-            "Keyboard layout used to map symbol characters to physical keys. 'auto' (default) detects the " +
-              "active layout of the focused window per call; only affects letters/digits' Shift-symbol " +
-              "punctuation (e.g. Shift+2 is '@' on US but '\"' on JIS) - plain letters and digits are " +
-              "unaffected by layout.",
+            "Keyboard layout used to map characters to physical keys. 'auto' (default) detects the active " +
+              "layout of the focused window per call, choosing between us/jis/de/fr/ru (plain letters/digits " +
+              "are unaffected by layout choice; only symbols and, for jis/de/fr/ru, some letters differ). " +
+              "'ko' (Korean 2-beolsik) and 'tw' (Taiwan Zhuyin/Bopomofo) must be requested explicitly - they " +
+              "are never auto-detected, and produce uncomposed jamo/zhuyin symbols only (no IME syllable/" +
+              "Han-character composition - e.g. 'r'+'k' on layout='ko' sends the two separate jamo characters " +
+              "'ㄱ' and 'ㅏ', not the composed syllable '가'). de/fr/ru/ko/tw are unverified against real " +
+              "hardware, unlike us/jis - see test/REALWORLD_TESTING.md.",
           ),
         delayMs: z
           .number()
