@@ -1,0 +1,73 @@
+name: Release
+
+# Publishes to npm when a version tag (vX.Y.Z) is pushed. Builds both halves
+# fresh (same steps as build.yml) rather than reusing artifacts, so the
+# published package always reflects exactly what's at the tagged commit.
+# Requires an NPM_TOKEN repository secret (an npm "Automation" access token
+# for the openinputbridge-mcp package) - this workflow will fail at the
+# publish step until that secret is added.
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build C helper (oib_bridge.exe)
+        shell: pwsh
+        run: |
+          cl.exe /nologo /W4 /utf-8 /Fe:helper\oib_bridge.exe helper\oib_bridge.c
+          if ($LASTEXITCODE -ne 0) { throw "cl.exe failed with exit code $LASTEXITCODE" }
+
+      - name: Smoke test oib_bridge.exe (no driver on this runner - expects a clean error, not a crash)
+        shell: pwsh
+        run: |
+          $response = '{"id":1,"cmd":"status"}' | & .\helper\oib_bridge.exe
+          $exitCode = $LASTEXITCODE
+          Write-Host "Response: $response"
+          Write-Host "Exit code: $exitCode"
+          if ($exitCode -ne 0) { throw "oib_bridge.exe exited with code $exitCode (expected 0)" }
+          if (-not $response -or $response -notmatch '"id":1') { throw "unexpected/missing response: $response" }
+
+      - name: Copy helper into bin/ for packaging
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force bin | Out-Null
+          Copy-Item helper\oib_bridge.exe bin\oib_bridge.exe
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Layout sanity check (pure logic, no driver required)
+        run: node test/layout_sanity_check.mjs
+
+      - name: Verify package.json version matches the pushed tag
+        shell: pwsh
+        run: |
+          $pkgVersion = node -p "require('./package.json').version"
+          $tagVersion = "${{ github.ref_name }}" -replace '^v', ''
+          if ($pkgVersion -ne $tagVersion) {
+            throw "package.json version ($pkgVersion) does not match tag ${{ github.ref_name }} (expected v$pkgVersion)"
+          }
+
+      - name: Publish to npm
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -11,6 +11,10 @@ helper/*.exe
 helper/*.pdb
 helper/*.ilk
 
+# Packaged native binary (populated by release.yml before `npm publish`,
+# never committed to source control)
+bin/
+
 # VS/MSBuild
 .vs/
 *.user

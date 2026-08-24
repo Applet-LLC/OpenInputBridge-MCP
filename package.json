@@ -3,6 +3,27 @@
   "version": "0.1.0",
   "description": "MCP server exposing OpenInputBridge (Interception-compatible kernel-level input) as SendInput()-alternative tools for GUI/native-app test automation.",
   "license": "MIT",
+  "author": "Applet-LLC",
+  "homepage": "https://github.com/Applet-LLC/OpenInputBridge-MCP#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Applet-LLC/OpenInputBridge-MCP.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Applet-LLC/OpenInputBridge-MCP/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "windows",
+    "automation",
+    "testing",
+    "keyboard",
+    "mouse",
+    "sendinput",
+    "interception",
+    "claude"
+  ],
   "os": ["win32"],
   "type": "module",
   "bin": {
@@ -16,7 +37,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "prepublishOnly": "node scripts/check-native-binary.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
