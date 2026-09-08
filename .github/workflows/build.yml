@@ -20,7 +20,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up MSVC developer environment
         uses: ilammy/msvc-dev-cmd@v1
@@ -42,9 +42,9 @@ jobs:
           if (-not $response -or $response -notmatch '"id":1') { throw "unexpected/missing response: $response" }
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Install Node dependencies
         run: npm ci
@@ -56,7 +56,7 @@ jobs:
         run: node test/layout_sanity_check.mjs
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: openinputbridge-mcp-build
           path: |

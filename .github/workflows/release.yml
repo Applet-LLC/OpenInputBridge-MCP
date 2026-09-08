@@ -5,15 +5,14 @@ name: Release
 # published package always reflects exactly what's at the tagged commit.
 #
 # Uses npm Trusted Publishing (OIDC) rather than a stored NPM_TOKEN secret -
-# no long-lived credential lives in this repo at all. This requires a
-# one-time setup on npmjs.com: the package must already exist (trusted
-# publishers are configured from an existing package's own settings page,
-# so the very first release has to be published manually - see
-# README.md's "既知の制限"), then under that package's Settings > Trusted
-# publishing, add a GitHub Actions publisher with organization/user =
-# Applet-LLC, repository = OpenInputBridge-MCP, workflow filename =
-# release.yml. Until that's configured, this workflow will fail at the
-# publish step with an auth error.
+# no long-lived credential lives in this repo at all. This required a
+# one-time setup on npmjs.com (done): 0.1.0 was published manually to
+# bootstrap the package (trusted publishers can only be configured from an
+# existing package's own settings page), then under that package's
+# Settings > Trusted publishing, a GitHub Actions publisher was added with
+# organization/user = Applet-LLC, repository = OpenInputBridge-MCP,
+# workflow filename = release.yml, and "Allow npm publish" enabled. Verified
+# working end-to-end with the 0.1.1 test release.
 on:
   push:
     tags:
@@ -28,7 +27,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up MSVC developer environment
         uses: ilammy/msvc-dev-cmd@v1
@@ -56,7 +55,7 @@ jobs:
           Copy-Item helper\oib_bridge.exe bin\oib_bridge.exe
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22" # npm trusted publishing needs npm CLI >=11.5.1 / Node >=22.14.0
           registry-url: "https://registry.npmjs.org"

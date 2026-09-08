@@ -145,7 +145,7 @@ npm run build
 cl.exe /nologo /W4 /utf-8 /Fe:helper\oib_bridge.exe helper\oib_bridge.c
 ```
 
-npm公開後は `npx openinputbridge-mcp` でのビルド不要インストールを予定していますが、現時点では未公開のため上記のソースビルドが必要です(詳細は「既知の制限」参照)。
+npmに公開済みのため、`npx openinputbridge-mcp` でビルド不要のインストールも可能です(ソースからビルドしたい場合は上記の手順を使ってください)。同梱の`oib_bridge.exe`は署名されていないため、初回実行時にWindows SmartScreenの警告が出る可能性があります(詳細は「既知の制限」参照)。
 
 MCPクライアント(例: Claude Code の `.mcp.json`)に登録します。
 
@@ -174,7 +174,7 @@ MCPクライアント(例: Claude Code の `.mcp.json`)に登録します。
 - **Bluetoothキーボード/マウス等、切断され得るデバイスでは、非接続時に送信が失敗します**: OpenInputBridgeデバイスドライバは、その時点で実際に接続されているキーボード/マウスのみを対象とします。Bluetooth接続の入力デバイスが省電力モードなどで切断状態になっている間は、MCPサーバー経由の入力送信も失敗します。常時接続の有線デバイス、またはCI/専用テスト機での利用を推奨します
 - **Windows専用**
 - **読み取り・監視系ツールなし**(意図的、上記参照)
-- **事前ビルド済みバイナリ未配布**: 現状 `helper/oib_bridge.c` を利用者自身がビルドする必要があります。npm公開の準備(`.github/workflows/release.yml`、`scripts/check-native-binary.mjs`等)は整いましたが、実際の公開はまだ行っていません。長期有効なトークンをリポジトリに置かない[npm Trusted Publishing(OIDC)](https://docs.npmjs.com/trusted-publishers/)方式を採用する予定で、Trusted Publisherの設定自体は「既存パッケージの設定ページ」から行う仕様のため、最初の1回だけ保守側が手元から`npm publish`する必要があります(それ以降のリリースは`release.yml`がタグpushで自動公開)。公開後もビルド成果物(`oib_bridge.exe`)はコード署名されない見込みで、初回実行時にWindows SmartScreen等の警告が出る可能性があります(署名は将来検討)
+- **`oib_bridge.exe`はコード署名されていません**: [npmで公開済み](https://www.npmjs.com/package/openinputbridge-mcp)(`npx openinputbridge-mcp`)で、`bin/oib_bridge.exe`が同梱されるためソースビルドは不要になりましたが、そのバイナリ自体は未署名のため、初回実行時にWindows SmartScreen等の警告が出る可能性があります(署名は将来検討)。リリースは長期有効なトークンをリポジトリに置かない[npm Trusted Publishing(OIDC)](https://docs.npmjs.com/trusted-publishers/)方式で、タグ(`vX.Y.Z`)pushにより`.github/workflows/release.yml`が自動公開します(`v0.1.1`で動作確認済み)
 
 ## セキュリティ
 
@@ -190,7 +190,7 @@ MCPクライアント(例: Claude Code の `.mcp.json`)に登録します。
 | M4 | 実機検証(実際のOpenInputBridgeインストール環境での動作確認・バグ修正、US/JIS配列対応) | ✅ 完了(詳細は [test/REALWORLD_TESTING.md](test/REALWORLD_TESTING.md)) |
 | M5 | GitHubでの公開(MITライセンス、パブリックリポジトリ) | ✅ 完了 |
 | M6 | GitHub Actionsによるビルド検証(push/PRごとにCヘルパー+TypeScript双方をビルド、`oib_bridge.exe`のスモークテスト) | ✅ 完了 |
-| M6b | ビルド成果物の署名検討、npmパッケージ公開(`npx openinputbridge-mcp`) | 🚧 公開準備完了(タグpush時の`release.yml`、Trusted Publishing対応)、実公開は初回手動publish + Trusted Publisher設定待ち |
+| M6b | npmパッケージ公開(`npx openinputbridge-mcp`) | ✅ 完了(Trusted Publishing方式、`v0.1.1`でタグpush→自動公開まで動作確認済み)。ビルド成果物の署名は今後の検討課題 |
 | M7 | クローズドベータ: 複数環境(非既定`KeyboardSlotCount`構成、複数物理キーボードの個別指定送信、他レイアウト等)での動作確認 | 🔲 未着手 |
 | M8 | MCPサーバーディレクトリへの掲載検討(安定運用の確認後) | 🔲 未着手 |
 
