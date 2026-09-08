@@ -1,6 +1,6 @@
 {
   "name": "openinputbridge-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server exposing OpenInputBridge (Interception-compatible kernel-level input) as SendInput()-alternative tools for GUI/native-app test automation.",
   "license": "MIT",
   "author": "Applet-LLC",
