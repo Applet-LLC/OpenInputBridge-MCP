@@ -3,13 +3,25 @@ name: Release
 # Publishes to npm when a version tag (vX.Y.Z) is pushed. Builds both halves
 # fresh (same steps as build.yml) rather than reusing artifacts, so the
 # published package always reflects exactly what's at the tagged commit.
-# Requires an NPM_TOKEN repository secret (an npm "Automation" access token
-# for the openinputbridge-mcp package) - this workflow will fail at the
-# publish step until that secret is added.
+#
+# Uses npm Trusted Publishing (OIDC) rather than a stored NPM_TOKEN secret -
+# no long-lived credential lives in this repo at all. This requires a
+# one-time setup on npmjs.com: the package must already exist (trusted
+# publishers are configured from an existing package's own settings page,
+# so the very first release has to be published manually - see
+# README.md's "既知の制限"), then under that package's Settings > Trusted
+# publishing, add a GitHub Actions publisher with organization/user =
+# Applet-LLC, repository = OpenInputBridge-MCP, workflow filename =
+# release.yml. Until that's configured, this workflow will fail at the
+# publish step with an auth error.
 on:
   push:
     tags:
       - "v*"
+
+permissions:
+  contents: read
+  id-token: write # required for npm's OIDC trusted-publishing exchange
 
 jobs:
   publish:
@@ -46,8 +58,11 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22" # npm trusted publishing needs npm CLI >=11.5.1 / Node >=22.14.0
           registry-url: "https://registry.npmjs.org"
+
+      - name: Update npm (bundled version may be older than trusted-publishing requires)
+        run: npm install -g npm@latest
 
       - name: Install Node dependencies
         run: npm ci
@@ -69,5 +84,3 @@ jobs:
 
       - name: Publish to npm
         run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

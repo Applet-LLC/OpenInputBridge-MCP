@@ -171,9 +171,10 @@ MCPクライアント(例: Claude Code の `.mcp.json`)に登録します。
 - `type_text`でShift状態を1文字ごとに切り替える極端なパターン(例: `"MiXeD"`)は、タイミング対策後も一部の文字でShiftが反映されないことがあります。通常の英文・識別子等では問題にならないことを確認済みです
 - マウスの相対移動(`mouse_move`, `absolute:false`)はOSのポインタ加速の影響を受けるため、指定した移動量とカーソルの実際の移動量は一致しません(物理マウスと同じ経路のため、想定通りの挙動)
 - マウスの絶対移動(`absolute:true`)の0-65535正規化座標は、既定では**プライマリモニタの物理ピクセル範囲**にマッピングされます(DPIスケーリング設定とは無関係。標準Win32 `SendInput`の`MOUSEEVENTF_ABSOLUTE`と同じ仕様)。**セカンダリモニタなど、仮想デスクトップ全体を対象にしたい場合は`virtualDesktop:true`を指定してください**(標準`SendInput`の`MOUSEEVENTF_VIRTUALDESK`相当)。マルチモニタ環境では相対移動(`absolute:false`)でモニタ境界をまたぐことも可能です。実機検証・`mouse_click`によるクリック精度確認済みです(詳細は [test/REALWORLD_TESTING.md](test/REALWORLD_TESTING.md) の項目6)
+- **Bluetoothキーボード/マウス等、切断され得るデバイスでは、非接続時に送信が失敗します**: OpenInputBridgeデバイスドライバは、その時点で実際に接続されているキーボード/マウスのみを対象とします。Bluetooth接続の入力デバイスが省電力モードなどで切断状態になっている間は、MCPサーバー経由の入力送信も失敗します。常時接続の有線デバイス、またはCI/専用テスト機での利用を推奨します
 - **Windows専用**
 - **読み取り・監視系ツールなし**(意図的、上記参照)
-- **事前ビルド済みバイナリ未配布**: 現状 `helper/oib_bridge.c` を利用者自身がビルドする必要があります。npm公開の準備(`.github/workflows/release.yml`、`scripts/check-native-binary.mjs`等)は整いましたが、実際の公開には保守側のnpmアカウント・トークン設定(`NPM_TOKEN` シークレット)が必要なため、公開自体は未実施です。公開後もビルド成果物(`oib_bridge.exe`)はコード署名されない見込みで、初回実行時にWindows SmartScreen等の警告が出る可能性があります(署名は将来検討)
+- **事前ビルド済みバイナリ未配布**: 現状 `helper/oib_bridge.c` を利用者自身がビルドする必要があります。npm公開の準備(`.github/workflows/release.yml`、`scripts/check-native-binary.mjs`等)は整いましたが、実際の公開はまだ行っていません。長期有効なトークンをリポジトリに置かない[npm Trusted Publishing(OIDC)](https://docs.npmjs.com/trusted-publishers/)方式を採用する予定で、Trusted Publisherの設定自体は「既存パッケージの設定ページ」から行う仕様のため、最初の1回だけ保守側が手元から`npm publish`する必要があります(それ以降のリリースは`release.yml`がタグpushで自動公開)。公開後もビルド成果物(`oib_bridge.exe`)はコード署名されない見込みで、初回実行時にWindows SmartScreen等の警告が出る可能性があります(署名は将来検討)
 
 ## セキュリティ
 
@@ -189,7 +190,7 @@ MCPクライアント(例: Claude Code の `.mcp.json`)に登録します。
 | M4 | 実機検証(実際のOpenInputBridgeインストール環境での動作確認・バグ修正、US/JIS配列対応) | ✅ 完了(詳細は [test/REALWORLD_TESTING.md](test/REALWORLD_TESTING.md)) |
 | M5 | GitHubでの公開(MITライセンス、パブリックリポジトリ) | ✅ 完了 |
 | M6 | GitHub Actionsによるビルド検証(push/PRごとにCヘルパー+TypeScript双方をビルド、`oib_bridge.exe`のスモークテスト) | ✅ 完了 |
-| M6b | ビルド成果物の署名検討、npmパッケージ公開(`npx openinputbridge-mcp`) | 🚧 公開準備完了(タグpush時の`release.yml`、`bin/oib_bridge.exe`同梱チェック)、実公開はnpmトークン設定待ち |
+| M6b | ビルド成果物の署名検討、npmパッケージ公開(`npx openinputbridge-mcp`) | 🚧 公開準備完了(タグpush時の`release.yml`、Trusted Publishing対応)、実公開は初回手動publish + Trusted Publisher設定待ち |
 | M7 | クローズドベータ: 複数環境(非既定`KeyboardSlotCount`構成、複数物理キーボードの個別指定送信、他レイアウト等)での動作確認 | 🔲 未着手 |
 | M8 | MCPサーバーディレクトリへの掲載検討(安定運用の確認後) | 🔲 未着手 |
 
